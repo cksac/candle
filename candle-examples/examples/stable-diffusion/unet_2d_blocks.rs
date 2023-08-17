@@ -220,7 +220,7 @@ impl UpDecoderBlock2D {
         config: UpDecoderBlock2DConfig,
     ) -> Result<Self> {
         let resnets: Vec<_> = {
-            let vs = vb.pp("resnets");
+            let vb = vb.pp("resnets");
             let conv_cfg = ResnetBlock2DConfig {
                 out_channels: Some(out_channels),
                 eps: config.resnet_eps,
@@ -327,7 +327,7 @@ impl UNetMidBlock2D {
         for index in 0..config.num_layers {
             let attn = AttentionBlock::new(vb_attns.pp(&index.to_string()), in_channels, attn_cfg)?;
             let resnet = ResnetBlock2D::new(
-                vs_resnets.pp(&(index + 1).to_string()),
+                vb_resnets.pp(&(index + 1).to_string()),
                 in_channels,
                 resnet_cfg,
             )?;

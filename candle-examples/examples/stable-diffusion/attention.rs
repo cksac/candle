@@ -196,16 +196,16 @@ impl BasicTransformerBlock {
         sliced_attention_size: Option<usize>,
     ) -> Result<Self> {
         let attn1 = CrossAttention::new(
-            vs.pp("attn1"),
+            vb.pp("attn1"),
             dim,
             None,
             n_heads,
             d_head,
             sliced_attention_size,
         )?;
-        let ff = FeedForward::new(vs.pp("ff"), dim, None, 4)?;
+        let ff = FeedForward::new(vb.pp("ff"), dim, None, 4)?;
         let attn2 = CrossAttention::new(
-            vs.pp("attn2"),
+            vb.pp("attn2"),
             dim,
             context_dim,
             n_heads,

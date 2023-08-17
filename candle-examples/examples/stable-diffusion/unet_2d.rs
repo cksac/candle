@@ -247,7 +247,7 @@ impl UNet2DConditionModel {
                     Ok(UNetUpBlock::CrossAttn(block))
                 } else {
                     let block = UpBlock2D::new(
-                        vs_ub.pp(&i.to_string()),
+                        vb_ub.pp(&i.to_string()),
                         in_channels,
                         prev_out_channels,
                         out_channels,
