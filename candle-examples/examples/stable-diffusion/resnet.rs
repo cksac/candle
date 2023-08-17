@@ -57,7 +57,7 @@ pub struct ResnetBlock2D {
 
 impl ResnetBlock2D {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         config: ResnetBlock2DConfig,
     ) -> Result<Self> {
@@ -66,11 +66,11 @@ impl ResnetBlock2D {
             stride: 1,
             padding: 1,
         };
-        let norm1 = nn::group_norm(config.groups, in_channels, config.eps, vs.pp("norm1"))?;
-        let conv1 = conv2d(in_channels, out_channels, 3, conv_cfg, vs.pp("conv1"))?;
+        let norm1 = nn::group_norm(config.groups, in_channels, config.eps, vb.pp("norm1"))?;
+        let conv1 = conv2d(in_channels, out_channels, 3, conv_cfg, vb.pp("conv1"))?;
         let groups_out = config.groups_out.unwrap_or(config.groups);
-        let norm2 = nn::group_norm(groups_out, out_channels, config.eps, vs.pp("norm2"))?;
-        let conv2 = conv2d(out_channels, out_channels, 3, conv_cfg, vs.pp("conv2"))?;
+        let norm2 = nn::group_norm(groups_out, out_channels, config.eps, vb.pp("norm2"))?;
+        let conv2 = conv2d(out_channels, out_channels, 3, conv_cfg, vb.pp("conv2"))?;
         let use_in_shortcut = config
             .use_in_shortcut
             .unwrap_or(in_channels != out_channels);
@@ -84,7 +84,7 @@ impl ResnetBlock2D {
                 out_channels,
                 1,
                 conv_cfg,
-                vs.pp("conv_shortcut"),
+                vb.pp("conv_shortcut"),
             )?)
         } else {
             None
@@ -94,7 +94,7 @@ impl ResnetBlock2D {
             Some(temb_channels) => Some(nn::linear(
                 temb_channels,
                 out_channels,
-                vs.pp("time_emb_proj"),
+                vb.pp("time_emb_proj"),
             )?),
         };
         let span = tracing::span!(tracing::Level::TRACE, "resnet2d");

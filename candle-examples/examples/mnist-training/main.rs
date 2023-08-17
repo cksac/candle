@@ -10,14 +10,14 @@ use candle_nn::{loss, ops, Linear, VarBuilder, VarMap};
 const IMAGE_DIM: usize = 784;
 const LABELS: usize = 10;
 
-fn linear_z(in_dim: usize, out_dim: usize, vs: VarBuilder) -> Result<Linear> {
-    let ws = vs.get_or_init((out_dim, in_dim), "weight", candle_nn::init::ZERO)?;
-    let bs = vs.get_or_init(out_dim, "bias", candle_nn::init::ZERO)?;
+fn linear_z(in_dim: usize, out_dim: usize, vb: VarBuilder) -> Result<Linear> {
+    let ws = vb.get_or_init((out_dim, in_dim), "weight", candle_nn::init::ZERO)?;
+    let bs = vb.get_or_init(out_dim, "bias", candle_nn::init::ZERO)?;
     Ok(Linear::new(ws, Some(bs)))
 }
 
 trait Model: Sized {
-    fn new(vs: VarBuilder) -> Result<Self>;
+    fn new(vb: VarBuilder) -> Result<Self>;
     fn forward(&self, xs: &Tensor) -> Result<Tensor>;
 }
 
@@ -26,8 +26,8 @@ struct LinearModel {
 }
 
 impl Model for LinearModel {
-    fn new(vs: VarBuilder) -> Result<Self> {
-        let linear = linear_z(IMAGE_DIM, LABELS, vs)?;
+    fn new(vb: VarBuilder) -> Result<Self> {
+        let linear = linear_z(IMAGE_DIM, LABELS, vb)?;
         Ok(Self { linear })
     }
 
@@ -42,9 +42,9 @@ struct Mlp {
 }
 
 impl Model for Mlp {
-    fn new(vs: VarBuilder) -> Result<Self> {
-        let ln1 = candle_nn::linear(IMAGE_DIM, 100, vs.pp("ln1"))?;
-        let ln2 = candle_nn::linear(100, LABELS, vs.pp("ln2"))?;
+    fn new(vb: VarBuilder) -> Result<Self> {
+        let ln1 = candle_nn::linear(IMAGE_DIM, 100, vb.pp("ln1"))?;
+        let ln2 = candle_nn::linear(100, LABELS, vb.pp("ln2"))?;
         Ok(Self { ln1, ln2 })
     }
 
@@ -73,8 +73,8 @@ fn training_loop<M: Model>(
     let train_labels = train_labels.to_dtype(DType::U32)?.to_device(&dev)?;
 
     let mut varmap = VarMap::new();
-    let vs = VarBuilder::from_varmap(&varmap, DType::F32, &dev);
-    let model = M::new(vs.clone())?;
+    let vb = VarBuilder::from_varmap(&varmap, DType::F32, &dev);
+    let model = M::new(vb.clone())?;
 
     if let Some(load) = &args.load {
         println!("loading weights from {load}");

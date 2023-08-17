@@ -18,7 +18,7 @@ struct Downsample2D {
 
 impl Downsample2D {
     fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         use_conv: bool,
         out_channels: usize,
@@ -26,7 +26,7 @@ impl Downsample2D {
     ) -> Result<Self> {
         let conv = if use_conv {
             let config = nn::Conv2dConfig { stride: 2, padding };
-            let conv = conv2d(in_channels, out_channels, 3, config, vs.pp("conv"))?;
+            let conv = conv2d(in_channels, out_channels, 3, config, vb.pp("conv"))?;
             Some(conv)
         } else {
             None
@@ -67,12 +67,12 @@ struct Upsample2D {
 }
 
 impl Upsample2D {
-    fn new(vs: nn::VarBuilder, in_channels: usize, out_channels: usize) -> Result<Self> {
+    fn new(vb: nn::VarBuilder, in_channels: usize, out_channels: usize) -> Result<Self> {
         let config = nn::Conv2dConfig {
             padding: 1,
             ..Default::default()
         };
-        let conv = conv2d(in_channels, out_channels, 3, config, vs.pp("conv"))?;
+        let conv = conv2d(in_channels, out_channels, 3, config, vb.pp("conv"))?;
         let span = tracing::span!(tracing::Level::TRACE, "upsample2d");
         Ok(Self { conv, span })
     }
@@ -125,13 +125,13 @@ pub struct DownEncoderBlock2D {
 
 impl DownEncoderBlock2D {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         out_channels: usize,
         config: DownEncoderBlock2DConfig,
     ) -> Result<Self> {
         let resnets: Vec<_> = {
-            let vs = vs.pp("resnets");
+            let vb = vb.pp("resnets");
             let conv_cfg = ResnetBlock2DConfig {
                 eps: config.resnet_eps,
                 out_channels: Some(out_channels),
@@ -143,13 +143,13 @@ impl DownEncoderBlock2D {
             (0..(config.num_layers))
                 .map(|i| {
                     let in_channels = if i == 0 { in_channels } else { out_channels };
-                    ResnetBlock2D::new(vs.pp(&i.to_string()), in_channels, conv_cfg)
+                    ResnetBlock2D::new(vb.pp(&i.to_string()), in_channels, conv_cfg)
                 })
                 .collect::<Result<Vec<_>>>()?
         };
         let downsampler = if config.add_downsample {
             let downsample = Downsample2D::new(
-                vs.pp("downsamplers").pp("0"),
+                vb.pp("downsamplers").pp("0"),
                 out_channels,
                 true,
                 out_channels,
@@ -214,13 +214,13 @@ pub struct UpDecoderBlock2D {
 
 impl UpDecoderBlock2D {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         out_channels: usize,
         config: UpDecoderBlock2DConfig,
     ) -> Result<Self> {
         let resnets: Vec<_> = {
-            let vs = vs.pp("resnets");
+            let vs = vb.pp("resnets");
             let conv_cfg = ResnetBlock2DConfig {
                 out_channels: Some(out_channels),
                 eps: config.resnet_eps,
@@ -232,13 +232,13 @@ impl UpDecoderBlock2D {
             (0..(config.num_layers))
                 .map(|i| {
                     let in_channels = if i == 0 { in_channels } else { out_channels };
-                    ResnetBlock2D::new(vs.pp(&i.to_string()), in_channels, conv_cfg)
+                    ResnetBlock2D::new(vb.pp(&i.to_string()), in_channels, conv_cfg)
                 })
                 .collect::<Result<Vec<_>>>()?
         };
         let upsampler = if config.add_upsample {
             let upsample =
-                Upsample2D::new(vs.pp("upsamplers").pp("0"), out_channels, out_channels)?;
+                Upsample2D::new(vb.pp("upsamplers").pp("0"), out_channels, out_channels)?;
             Some(upsample)
         } else {
             None
@@ -299,13 +299,13 @@ pub struct UNetMidBlock2D {
 
 impl UNetMidBlock2D {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         temb_channels: Option<usize>,
         config: UNetMidBlock2DConfig,
     ) -> Result<Self> {
-        let vs_resnets = vs.pp("resnets");
-        let vs_attns = vs.pp("attentions");
+        let vb_resnets = vb.pp("resnets");
+        let vb_attns = vb.pp("attentions");
         let resnet_groups = config
             .resnet_groups
             .unwrap_or_else(|| usize::min(in_channels / 4, 32));
@@ -316,7 +316,7 @@ impl UNetMidBlock2D {
             temb_channels,
             ..Default::default()
         };
-        let resnet = ResnetBlock2D::new(vs_resnets.pp("0"), in_channels, resnet_cfg)?;
+        let resnet = ResnetBlock2D::new(vb_resnets.pp("0"), in_channels, resnet_cfg)?;
         let attn_cfg = AttentionBlockConfig {
             num_head_channels: config.attn_num_head_channels,
             num_groups: resnet_groups,
@@ -325,7 +325,7 @@ impl UNetMidBlock2D {
         };
         let mut attn_resnets = vec![];
         for index in 0..config.num_layers {
-            let attn = AttentionBlock::new(vs_attns.pp(&index.to_string()), in_channels, attn_cfg)?;
+            let attn = AttentionBlock::new(vb_attns.pp(&index.to_string()), in_channels, attn_cfg)?;
             let resnet = ResnetBlock2D::new(
                 vs_resnets.pp(&(index + 1).to_string()),
                 in_channels,
@@ -390,13 +390,13 @@ pub struct UNetMidBlock2DCrossAttn {
 
 impl UNetMidBlock2DCrossAttn {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         temb_channels: Option<usize>,
         config: UNetMidBlock2DCrossAttnConfig,
     ) -> Result<Self> {
-        let vs_resnets = vs.pp("resnets");
-        let vs_attns = vs.pp("attentions");
+        let vb_resnets = vb.pp("resnets");
+        let vb_attns = vb.pp("attentions");
         let resnet_groups = config
             .resnet_groups
             .unwrap_or_else(|| usize::min(in_channels / 4, 32));
@@ -407,7 +407,7 @@ impl UNetMidBlock2DCrossAttn {
             temb_channels,
             ..Default::default()
         };
-        let resnet = ResnetBlock2D::new(vs_resnets.pp("0"), in_channels, resnet_cfg)?;
+        let resnet = ResnetBlock2D::new(vb_resnets.pp("0"), in_channels, resnet_cfg)?;
         let n_heads = config.attn_num_head_channels;
         let attn_cfg = SpatialTransformerConfig {
             depth: 1,
@@ -419,14 +419,14 @@ impl UNetMidBlock2DCrossAttn {
         let mut attn_resnets = vec![];
         for index in 0..config.num_layers {
             let attn = SpatialTransformer::new(
-                vs_attns.pp(&index.to_string()),
+                vb_attns.pp(&index.to_string()),
                 in_channels,
                 n_heads,
                 in_channels / n_heads,
                 attn_cfg,
             )?;
             let resnet = ResnetBlock2D::new(
-                vs_resnets.pp(&(index + 1).to_string()),
+                vb_resnets.pp(&(index + 1).to_string()),
                 in_channels,
                 resnet_cfg,
             )?;
@@ -491,13 +491,13 @@ pub struct DownBlock2D {
 
 impl DownBlock2D {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         out_channels: usize,
         temb_channels: Option<usize>,
         config: DownBlock2DConfig,
     ) -> Result<Self> {
-        let vs_resnets = vs.pp("resnets");
+        let vb_resnets = vb.pp("resnets");
         let resnet_cfg = ResnetBlock2DConfig {
             out_channels: Some(out_channels),
             eps: config.resnet_eps,
@@ -508,12 +508,12 @@ impl DownBlock2D {
         let resnets = (0..config.num_layers)
             .map(|i| {
                 let in_channels = if i == 0 { in_channels } else { out_channels };
-                ResnetBlock2D::new(vs_resnets.pp(&i.to_string()), in_channels, resnet_cfg)
+                ResnetBlock2D::new(vb_resnets.pp(&i.to_string()), in_channels, resnet_cfg)
             })
             .collect::<Result<Vec<_>>>()?;
         let downsampler = if config.add_downsample {
             let downsampler = Downsample2D::new(
-                vs.pp("downsamplers").pp("0"),
+                vb.pp("downsamplers").pp("0"),
                 out_channels,
                 true,
                 out_channels,
@@ -584,14 +584,14 @@ pub struct CrossAttnDownBlock2D {
 
 impl CrossAttnDownBlock2D {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         out_channels: usize,
         temb_channels: Option<usize>,
         config: CrossAttnDownBlock2DConfig,
     ) -> Result<Self> {
         let downblock = DownBlock2D::new(
-            vs.clone(),
+            vb.clone(),
             in_channels,
             out_channels,
             temb_channels,
@@ -605,11 +605,11 @@ impl CrossAttnDownBlock2D {
             sliced_attention_size: config.sliced_attention_size,
             use_linear_projection: config.use_linear_projection,
         };
-        let vs_attn = vs.pp("attentions");
+        let vb_attn = vb.pp("attentions");
         let attentions = (0..config.downblock.num_layers)
             .map(|i| {
                 SpatialTransformer::new(
-                    vs_attn.pp(&i.to_string()),
+                    vb_attn.pp(&i.to_string()),
                     out_channels,
                     n_heads,
                     out_channels / n_heads,
@@ -685,14 +685,14 @@ pub struct UpBlock2D {
 
 impl UpBlock2D {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         prev_output_channels: usize,
         out_channels: usize,
         temb_channels: Option<usize>,
         config: UpBlock2DConfig,
     ) -> Result<Self> {
-        let vs_resnets = vs.pp("resnets");
+        let vb_resnets = vb.pp("resnets");
         let resnet_cfg = ResnetBlock2DConfig {
             out_channels: Some(out_channels),
             temb_channels,
@@ -713,12 +713,12 @@ impl UpBlock2D {
                     out_channels
                 };
                 let in_channels = resnet_in_channels + res_skip_channels;
-                ResnetBlock2D::new(vs_resnets.pp(&i.to_string()), in_channels, resnet_cfg)
+                ResnetBlock2D::new(vb_resnets.pp(&i.to_string()), in_channels, resnet_cfg)
             })
             .collect::<Result<Vec<_>>>()?;
         let upsampler = if config.add_upsample {
             let upsampler =
-                Upsample2D::new(vs.pp("upsamplers").pp("0"), out_channels, out_channels)?;
+                Upsample2D::new(vb.pp("upsamplers").pp("0"), out_channels, out_channels)?;
             Some(upsampler)
         } else {
             None
@@ -784,7 +784,7 @@ pub struct CrossAttnUpBlock2D {
 
 impl CrossAttnUpBlock2D {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         prev_output_channels: usize,
         out_channels: usize,
@@ -792,7 +792,7 @@ impl CrossAttnUpBlock2D {
         config: CrossAttnUpBlock2DConfig,
     ) -> Result<Self> {
         let upblock = UpBlock2D::new(
-            vs.clone(),
+            vb.clone(),
             in_channels,
             prev_output_channels,
             out_channels,
@@ -807,11 +807,11 @@ impl CrossAttnUpBlock2D {
             sliced_attention_size: config.sliced_attention_size,
             use_linear_projection: config.use_linear_projection,
         };
-        let vs_attn = vs.pp("attentions");
+        let vb_attn = vb.pp("attentions");
         let attentions = (0..config.upblock.num_layers)
             .map(|i| {
                 SpatialTransformer::new(
-                    vs_attn.pp(&i.to_string()),
+                    vb_attn.pp(&i.to_string()),
                     out_channels,
                     n_heads,
                     out_channels / n_heads,

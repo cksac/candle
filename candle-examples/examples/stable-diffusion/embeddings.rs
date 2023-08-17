@@ -10,9 +10,9 @@ pub struct TimestepEmbedding {
 
 impl TimestepEmbedding {
     // act_fn: "silu"
-    pub fn new(vs: nn::VarBuilder, channel: usize, time_embed_dim: usize) -> Result<Self> {
-        let linear_1 = nn::linear(channel, time_embed_dim, vs.pp("linear_1"))?;
-        let linear_2 = nn::linear(time_embed_dim, time_embed_dim, vs.pp("linear_2"))?;
+    pub fn new(vb: nn::VarBuilder, channel: usize, time_embed_dim: usize) -> Result<Self> {
+        let linear_1 = nn::linear(channel, time_embed_dim, vb.pp("linear_1"))?;
+        let linear_2 = nn::linear(time_embed_dim, time_embed_dim, vb.pp("linear_2"))?;
         Ok(Self { linear_1, linear_2 })
     }
 }

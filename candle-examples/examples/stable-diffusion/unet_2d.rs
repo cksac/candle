@@ -100,7 +100,7 @@ pub struct UNet2DConditionModel {
 
 impl UNet2DConditionModel {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         out_channels: usize,
         config: UNet2DConditionModelConfig,
@@ -114,13 +114,13 @@ impl UNet2DConditionModel {
             stride: 1,
             padding: 1,
         };
-        let conv_in = conv2d(in_channels, b_channels, 3, conv_cfg, vs.pp("conv_in"))?;
+        let conv_in = conv2d(in_channels, b_channels, 3, conv_cfg, vb.pp("conv_in"))?;
 
         let time_proj = Timesteps::new(b_channels, config.flip_sin_to_cos, config.freq_shift);
         let time_embedding =
-            TimestepEmbedding::new(vs.pp("time_embedding"), b_channels, time_embed_dim)?;
+            TimestepEmbedding::new(vb.pp("time_embedding"), b_channels, time_embed_dim)?;
 
-        let vs_db = vs.pp("down_blocks");
+        let vs_db = vb.pp("down_blocks");
         let down_blocks = (0..n_blocks)
             .map(|i| {
                 let BlockConfig {
@@ -187,13 +187,13 @@ impl UNet2DConditionModel {
             ..Default::default()
         };
         let mid_block = UNetMidBlock2DCrossAttn::new(
-            vs.pp("mid_block"),
+            vb.pp("mid_block"),
             bl_channels,
             Some(time_embed_dim),
             mid_cfg,
         )?;
 
-        let vs_ub = vs.pp("up_blocks");
+        let vb_ub = vb.pp("up_blocks");
         let up_blocks = (0..n_blocks)
             .map(|i| {
                 let BlockConfig {
@@ -237,7 +237,7 @@ impl UNet2DConditionModel {
                         use_linear_projection: config.use_linear_projection,
                     };
                     let block = CrossAttnUpBlock2D::new(
-                        vs_ub.pp(&i.to_string()),
+                        vb_ub.pp(&i.to_string()),
                         in_channels,
                         prev_out_channels,
                         out_channels,
@@ -263,9 +263,9 @@ impl UNet2DConditionModel {
             config.norm_num_groups,
             b_channels,
             config.norm_eps,
-            vs.pp("conv_norm_out"),
+            vb.pp("conv_norm_out"),
         )?;
-        let conv_out = conv2d(b_channels, out_channels, 3, conv_cfg, vs.pp("conv_out"))?;
+        let conv_out = conv2d(b_channels, out_channels, 3, conv_cfg, vb.pp("conv_out"))?;
         let span = tracing::span!(tracing::Level::TRACE, "unet2d");
         Ok(Self {
             conv_in,

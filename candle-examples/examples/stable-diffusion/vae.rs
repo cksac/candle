@@ -44,7 +44,7 @@ struct Encoder {
 
 impl Encoder {
     fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         out_channels: usize,
         config: EncoderConfig,
@@ -58,10 +58,10 @@ impl Encoder {
             config.block_out_channels[0],
             3,
             conv_cfg,
-            vs.pp("conv_in"),
+            vb.pp("conv_in"),
         )?;
         let mut down_blocks = vec![];
-        let vs_down_blocks = vs.pp("down_blocks");
+        let vb_down_blocks = vb.pp("down_blocks");
         for index in 0..config.block_out_channels.len() {
             let out_channels = config.block_out_channels[index];
             let in_channels = if index > 0 {
@@ -79,7 +79,7 @@ impl Encoder {
                 ..Default::default()
             };
             let down_block = DownEncoderBlock2D::new(
-                vs_down_blocks.pp(&index.to_string()),
+                vb_down_blocks.pp(&index.to_string()),
                 in_channels,
                 out_channels,
                 cfg,
@@ -95,12 +95,12 @@ impl Encoder {
             ..Default::default()
         };
         let mid_block =
-            UNetMidBlock2D::new(vs.pp("mid_block"), last_block_out_channels, None, mid_cfg)?;
+            UNetMidBlock2D::new(vb.pp("mid_block"), last_block_out_channels, None, mid_cfg)?;
         let conv_norm_out = nn::group_norm(
             config.norm_num_groups,
             last_block_out_channels,
             1e-6,
-            vs.pp("conv_norm_out"),
+            vb.pp("conv_norm_out"),
         )?;
         let conv_out_channels = if config.double_z {
             2 * out_channels
@@ -116,7 +116,7 @@ impl Encoder {
             conv_out_channels,
             3,
             conv_cfg,
-            vs.pp("conv_out"),
+            vb.pp("conv_out"),
         )?;
         Ok(Self {
             conv_in,
@@ -173,7 +173,7 @@ struct Decoder {
 
 impl Decoder {
     fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         out_channels: usize,
         config: DecoderConfig,
@@ -189,7 +189,7 @@ impl Decoder {
             last_block_out_channels,
             3,
             conv_cfg,
-            vs.pp("conv_in"),
+            vb.pp("conv_in"),
         )?;
         let mid_cfg = UNetMidBlock2DConfig {
             resnet_eps: 1e-6,
@@ -199,9 +199,9 @@ impl Decoder {
             ..Default::default()
         };
         let mid_block =
-            UNetMidBlock2D::new(vs.pp("mid_block"), last_block_out_channels, None, mid_cfg)?;
+            UNetMidBlock2D::new(vb.pp("mid_block"), last_block_out_channels, None, mid_cfg)?;
         let mut up_blocks = vec![];
-        let vs_up_blocks = vs.pp("up_blocks");
+        let vb_up_blocks = vb.pp("up_blocks");
         let reversed_block_out_channels: Vec<_> =
             config.block_out_channels.iter().copied().rev().collect();
         for index in 0..n_block_out_channels {
@@ -220,7 +220,7 @@ impl Decoder {
                 ..Default::default()
             };
             let up_block = UpDecoderBlock2D::new(
-                vs_up_blocks.pp(&index.to_string()),
+                vb_up_blocks.pp(&index.to_string()),
                 in_channels,
                 out_channels,
                 cfg,
@@ -231,7 +231,7 @@ impl Decoder {
             config.norm_num_groups,
             config.block_out_channels[0],
             1e-6,
-            vs.pp("conv_norm_out"),
+            vb.pp("conv_norm_out"),
         )?;
         let conv_cfg = nn::Conv2dConfig {
             padding: 1,
@@ -242,7 +242,7 @@ impl Decoder {
             out_channels,
             3,
             conv_cfg,
-            vs.pp("conv_out"),
+            vb.pp("conv_out"),
         )?;
         Ok(Self {
             conv_in,
@@ -320,7 +320,7 @@ pub struct AutoEncoderKL {
 
 impl AutoEncoderKL {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         out_channels: usize,
         config: AutoEncoderKLConfig,
@@ -332,27 +332,27 @@ impl AutoEncoderKL {
             norm_num_groups: config.norm_num_groups,
             double_z: true,
         };
-        let encoder = Encoder::new(vs.pp("encoder"), in_channels, latent_channels, encoder_cfg)?;
+        let encoder = Encoder::new(vb.pp("encoder"), in_channels, latent_channels, encoder_cfg)?;
         let decoder_cfg = DecoderConfig {
             block_out_channels: config.block_out_channels.clone(),
             layers_per_block: config.layers_per_block,
             norm_num_groups: config.norm_num_groups,
         };
-        let decoder = Decoder::new(vs.pp("decoder"), latent_channels, out_channels, decoder_cfg)?;
+        let decoder = Decoder::new(vb.pp("decoder"), latent_channels, out_channels, decoder_cfg)?;
         let conv_cfg = Default::default();
         let quant_conv = nn::conv2d(
             2 * latent_channels,
             2 * latent_channels,
             1,
             conv_cfg,
-            vs.pp("quant_conv"),
+            vb.pp("quant_conv"),
         )?;
         let post_quant_conv = nn::conv2d(
             latent_channels,
             latent_channels,
             1,
             conv_cfg,
-            vs.pp("post_quant_conv"),
+            vb.pp("post_quant_conv"),
         )?;
         Ok(Self {
             encoder,

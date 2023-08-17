@@ -10,8 +10,8 @@ struct GeGlu {
 }
 
 impl GeGlu {
-    fn new(vs: nn::VarBuilder, dim_in: usize, dim_out: usize) -> Result<Self> {
-        let proj = nn::linear(dim_in, dim_out * 2, vs.pp("proj"))?;
+    fn new(vb: nn::VarBuilder, dim_in: usize, dim_out: usize) -> Result<Self> {
+        let proj = nn::linear(dim_in, dim_out * 2, vb.pp("proj"))?;
         let span = tracing::span!(tracing::Level::TRACE, "geglu");
         Ok(Self { proj, span })
     }
@@ -38,12 +38,12 @@ impl FeedForward {
     // https://github.com/huggingface/diffusers/blob/d3d22ce5a894becb951eec03e663951b28d45135/src/diffusers/models/attention.py#L347
     /// Creates a new feed-forward layer based on some given input dimension, some
     /// output dimension, and a multiplier to be used for the intermediary layer.
-    fn new(vs: nn::VarBuilder, dim: usize, dim_out: Option<usize>, mult: usize) -> Result<Self> {
+    fn new(vb: nn::VarBuilder, dim: usize, dim_out: Option<usize>, mult: usize) -> Result<Self> {
         let inner_dim = dim * mult;
         let dim_out = dim_out.unwrap_or(dim);
-        let vs = vs.pp("net");
-        let project_in = GeGlu::new(vs.pp("0"), dim, inner_dim)?;
-        let linear = nn::linear(inner_dim, dim_out, vs.pp("2"))?;
+        let vb = vb.pp("net");
+        let project_in = GeGlu::new(vb.pp("0"), dim, inner_dim)?;
+        let linear = nn::linear(inner_dim, dim_out, vb.pp("2"))?;
         let span = tracing::span!(tracing::Level::TRACE, "ff");
         Ok(Self {
             project_in,
@@ -77,7 +77,7 @@ struct CrossAttention {
 impl CrossAttention {
     // Defaults should be heads = 8, dim_head = 64, context_dim = None
     fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         query_dim: usize,
         context_dim: Option<usize>,
         heads: usize,
@@ -87,10 +87,10 @@ impl CrossAttention {
         let inner_dim = dim_head * heads;
         let context_dim = context_dim.unwrap_or(query_dim);
         let scale = 1.0 / f64::sqrt(dim_head as f64);
-        let to_q = nn::linear_no_bias(query_dim, inner_dim, vs.pp("to_q"))?;
-        let to_k = nn::linear_no_bias(context_dim, inner_dim, vs.pp("to_k"))?;
-        let to_v = nn::linear_no_bias(context_dim, inner_dim, vs.pp("to_v"))?;
-        let to_out = nn::linear(inner_dim, query_dim, vs.pp("to_out.0"))?;
+        let to_q = nn::linear_no_bias(query_dim, inner_dim, vb.pp("to_q"))?;
+        let to_k = nn::linear_no_bias(context_dim, inner_dim, vb.pp("to_k"))?;
+        let to_v = nn::linear_no_bias(context_dim, inner_dim, vb.pp("to_v"))?;
+        let to_out = nn::linear(inner_dim, query_dim, vb.pp("to_out.0"))?;
         let span = tracing::span!(tracing::Level::TRACE, "xa");
         let span_attn = tracing::span!(tracing::Level::TRACE, "xa-attn");
         Ok(Self {
@@ -188,7 +188,7 @@ struct BasicTransformerBlock {
 
 impl BasicTransformerBlock {
     fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         dim: usize,
         n_heads: usize,
         d_head: usize,
@@ -212,9 +212,9 @@ impl BasicTransformerBlock {
             d_head,
             sliced_attention_size,
         )?;
-        let norm1 = nn::layer_norm(dim, 1e-5, vs.pp("norm1"))?;
-        let norm2 = nn::layer_norm(dim, 1e-5, vs.pp("norm2"))?;
-        let norm3 = nn::layer_norm(dim, 1e-5, vs.pp("norm3"))?;
+        let norm1 = nn::layer_norm(dim, 1e-5, vb.pp("norm1"))?;
+        let norm2 = nn::layer_norm(dim, 1e-5, vb.pp("norm2"))?;
+        let norm3 = nn::layer_norm(dim, 1e-5, vb.pp("norm3"))?;
         let span = tracing::span!(tracing::Level::TRACE, "basic-transformer");
         Ok(Self {
             attn1,
@@ -275,30 +275,30 @@ pub struct SpatialTransformer {
 
 impl SpatialTransformer {
     pub fn new(
-        vs: nn::VarBuilder,
+        vb: nn::VarBuilder,
         in_channels: usize,
         n_heads: usize,
         d_head: usize,
         config: SpatialTransformerConfig,
     ) -> Result<Self> {
         let inner_dim = n_heads * d_head;
-        let norm = nn::group_norm(config.num_groups, in_channels, 1e-6, vs.pp("norm"))?;
+        let norm = nn::group_norm(config.num_groups, in_channels, 1e-6, vb.pp("norm"))?;
         let proj_in = if config.use_linear_projection {
-            Proj::Linear(nn::linear(in_channels, inner_dim, vs.pp("proj_in"))?)
+            Proj::Linear(nn::linear(in_channels, inner_dim, vb.pp("proj_in"))?)
         } else {
             Proj::Conv2d(nn::conv2d(
                 in_channels,
                 inner_dim,
                 1,
                 Default::default(),
-                vs.pp("proj_in"),
+                vb.pp("proj_in"),
             )?)
         };
         let mut transformer_blocks = vec![];
-        let vs_tb = vs.pp("transformer_blocks");
+        let vb_tb = vb.pp("transformer_blocks");
         for index in 0..config.depth {
             let tb = BasicTransformerBlock::new(
-                vs_tb.pp(&index.to_string()),
+                vb_tb.pp(&index.to_string()),
                 inner_dim,
                 n_heads,
                 d_head,
@@ -308,14 +308,14 @@ impl SpatialTransformer {
             transformer_blocks.push(tb)
         }
         let proj_out = if config.use_linear_projection {
-            Proj::Linear(nn::linear(in_channels, inner_dim, vs.pp("proj_out"))?)
+            Proj::Linear(nn::linear(in_channels, inner_dim, vb.pp("proj_out"))?)
         } else {
             Proj::Conv2d(nn::conv2d(
                 inner_dim,
                 in_channels,
                 1,
                 Default::default(),
-                vs.pp("proj_out"),
+                vb.pp("proj_out"),
             )?)
         };
         let span = tracing::span!(tracing::Level::TRACE, "spatial-transformer");
@@ -407,15 +407,15 @@ pub struct AttentionBlock {
 }
 
 impl AttentionBlock {
-    pub fn new(vs: nn::VarBuilder, channels: usize, config: AttentionBlockConfig) -> Result<Self> {
+    pub fn new(vb: nn::VarBuilder, channels: usize, config: AttentionBlockConfig) -> Result<Self> {
         let num_head_channels = config.num_head_channels.unwrap_or(channels);
         let num_heads = channels / num_head_channels;
         let group_norm =
-            nn::group_norm(config.num_groups, channels, config.eps, vs.pp("group_norm"))?;
-        let query = nn::linear(channels, channels, vs.pp("query"))?;
-        let key = nn::linear(channels, channels, vs.pp("key"))?;
-        let value = nn::linear(channels, channels, vs.pp("value"))?;
-        let proj_attn = nn::linear(channels, channels, vs.pp("proj_attn"))?;
+            nn::group_norm(config.num_groups, channels, config.eps, vb.pp("group_norm"))?;
+        let query = nn::linear(channels, channels, vb.pp("query"))?;
+        let key = nn::linear(channels, channels, vb.pp("key"))?;
+        let value = nn::linear(channels, channels, vb.pp("value"))?;
+        let proj_attn = nn::linear(channels, channels, vb.pp("proj_attn"))?;
         let span = tracing::span!(tracing::Level::TRACE, "attn-block");
         Ok(Self {
             group_norm,
